@@ -1,13 +1,14 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
-	"os"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
-	"flag"
+
 	"github.com/Knorkebrot/m3u"
 	"github.com/cheggaaa/pb"
 )
@@ -79,9 +80,9 @@ func main() {
 		}
 
 		fmt.Println("")
-		file, err := os.OpenFile(path, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0644)
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error: cannot open", path + ":", err)
+			fmt.Fprintln(os.Stderr, "Error: cannot open", path+":", err)
 			resp.Body.Close()
 			os.Exit(50)
 		}
