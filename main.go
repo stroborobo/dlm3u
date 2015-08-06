@@ -68,6 +68,9 @@ func main() {
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error: http get failed:", err)
 			continue
+		} else if resp.StatusCode != 200 {
+			fmt.Fprintln(os.Stderr, "Error: http status not ok:", resp.Status)
+			continue
 		}
 
 		path := target + PS + path.Base(u.Path)
