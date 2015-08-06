@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/Knorkebrot/m3u"
 	"github.com/cheggaaa/pb"
+	flag "github.com/ogier/pflag"
 )
 
 const (
@@ -23,6 +23,10 @@ func usage() {
 }
 
 func main() {
+	var checkNameOnly bool
+	flag.BoolVarP(&checkNameOnly, "name-only", "n", false,
+		"Skip existing files only based on name, don't check it's size.")
+
 	flag.Usage = usage
 	flag.Parse()
 
@@ -76,7 +80,7 @@ func main() {
 		path := target + PS + path.Base(u.Path)
 
 		fi, err := os.Stat(path)
-		if err == nil && fi.Size() == resp.ContentLength {
+		if err == nil && (checkNameOnly || fi.Size() == resp.ContentLength) {
 			resp.Body.Close()
 			fmt.Println(" already downloaded, skipping.")
 			continue
