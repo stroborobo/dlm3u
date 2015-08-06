@@ -13,6 +13,11 @@ import (
 	flag "github.com/ogier/pflag"
 )
 
+var (
+	checkNameOnly bool
+	target        string
+)
+
 const (
 	PS = string(os.PathSeparator)
 )
@@ -23,7 +28,6 @@ func usage() {
 }
 
 func main() {
-	var checkNameOnly bool
 	flag.BoolVarP(&checkNameOnly, "name-only", "n", false,
 		"Skip existing files only based on name, don't check it's size.")
 
@@ -36,79 +40,104 @@ func main() {
 	}
 
 	input, err := os.Open(flag.Arg(0))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(10)
-	}
+	exitErr(err)
 
 	pls, err := m3u.Parse(input)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(20)
-	}
-	target := flag.Arg(1)
+	exitErr(err)
+
+	target = flag.Arg(1)
 	stat, err := os.Stat(target)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(30)
-	} else if !stat.IsDir() {
-		fmt.Fprintln(os.Stderr, "Error: not a directory:", target)
-		os.Exit(40)
+	exitErr(err)
+	if !stat.IsDir() {
+		exitPrint("Error: not a directory:", target)
 	}
 
 	for _, song := range pls {
-		fmt.Print(song.Title + ":")
-		u, err := url.Parse(song.Path)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error: malformed url:", song.Path, "skipping.")
-			continue
-		}
-		if u.Scheme != "http" && u.Scheme != "https" {
-			fmt.Fprintln(os.Stderr, "Error: not a valid http(s) url:", song.Path, "skipping.")
-			continue
-		}
+		download(song)
+	}
+}
 
-		resp, err := http.Get(song.Path)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error: http get failed:", err)
-			continue
-		} else if resp.StatusCode != 200 {
-			fmt.Fprintln(os.Stderr, "Error: http status not ok:", resp.Status)
-			continue
-		}
+func getURL(str string) *url.URL {
+	u, err := url.Parse(str)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error: malformed url:", str, "skipping.")
+		return nil
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		fmt.Fprintln(os.Stderr, "Error: not a valid http(s) url:", str, "skipping.")
+		return nil
+	}
+	return u
+}
 
-		path := target + PS + path.Base(u.Path)
+func checkExists(path string, size int64) bool {
+	if checkNameOnly && size > 0 {
+		// already checked
+		return false
+	} else if !checkNameOnly && size == 0 {
+		// check later
+		return false
+	}
 
-		fi, err := os.Stat(path)
-		if err == nil && (checkNameOnly || fi.Size() == resp.ContentLength) {
-			resp.Body.Close()
-			fmt.Println(" already downloaded, skipping.")
-			continue
-		}
+	fi, err := os.Stat(path)
+	exists := err == nil
+	if !checkNameOnly {
+		exists = exists && fi.Size() == size
+	}
+	if exists {
+		fmt.Println(" already downloaded, skipping.")
+	}
+	return exists
+}
 
-		fmt.Println("")
-		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error: cannot open", path+":", err)
-			resp.Body.Close()
-			os.Exit(50)
-		}
+func download(song *m3u.Song) {
+	fmt.Print(song.Title + ":")
 
-		bar := pb.New(int(resp.ContentLength))
-		bar.SetUnits(pb.U_BYTES)
-		bar.SetMaxWidth(79)
-		bar.Start()
-		writer := io.MultiWriter(file, bar)
-		_, err = io.Copy(writer, resp.Body)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error: download failed:", err)
-			resp.Body.Close()
-			file.Close()
-			os.Remove(path)
-			continue
-		}
-		resp.Body.Close()
-		file.Close()
-		bar.Finish()
+	u := getURL(song.Path)
+	if u == nil {
+		return
+	}
+
+	// target file path
+	path := target + PS + path.Base(u.Path)
+	if checkExists(path, 0) {
+		return
+	}
+
+	// start the request
+	resp, err := http.Get(song.Path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error: http get failed:", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		fmt.Fprintln(os.Stderr, "Error: http status not ok:", resp.Status)
+		return
+	}
+	if checkExists(path, resp.ContentLength) {
+		return
+	}
+
+	fmt.Println("")
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	exitErr(err, "Error: cannot open", path+":", err)
+
+	// progressbar
+	bar := pb.New(int(resp.ContentLength))
+	bar.SetUnits(pb.U_BYTES)
+	bar.SetMaxWidth(79)
+	bar.Start()
+	defer bar.Finish()
+
+	writer := io.MultiWriter(file, bar)
+	_, err = io.Copy(writer, resp.Body)
+
+	file.Close()
+
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error: download failed:", err)
+		os.Remove(path)
+		return
 	}
 }

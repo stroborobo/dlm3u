@@ -17,3 +17,8 @@ Usage
 	4.91 MB / 4.91 MB [===============================================] 100.00 % 3s
 	Nick Cave & Warren Ellis - Cowgirl:
 	2.65 MB / 5.73 MB [======================>-------------------------] 46.32 % 6s
+
+ToDo
+====
+
+- Cleanup if dlm3u gets killed in the middle of writing a file
