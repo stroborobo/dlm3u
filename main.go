@@ -91,12 +91,16 @@ func checkExists(path string, size int64) bool {
 }
 
 func download(song *m3u.Song) {
-	fmt.Print(song.Title + ":")
-
 	u := getURL(song.Path)
 	if u == nil {
 		return
 	}
+
+	title := song.Title
+	if title == "" {
+		title = path.Base(u.Path)
+	}
+	fmt.Print(title + ":")
 
 	// target file path
 	path := target + PS + path.Base(u.Path)
